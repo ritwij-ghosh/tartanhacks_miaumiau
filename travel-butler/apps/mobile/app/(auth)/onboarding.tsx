@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
@@ -27,6 +28,7 @@ export default function OnboardingScreen() {
   const [saving, setSaving] = useState(false);
 
   // Preference state
+  const [hometown, setHometown] = useState("");
   const [travelPace, setTravelPace] = useState(3);
   const [dietary, setDietary] = useState<string[]>([]);
   const [budget, setBudget] = useState(3);
@@ -45,6 +47,7 @@ export default function OnboardingScreen() {
   const handleFinish = async () => {
     setSaving(true);
     await updatePreferences({
+      hometown: hometown.trim() || null,
       travel_pace: travelPace,
       dietary_restrictions: dietary,
       budget_range: budget,
@@ -55,7 +58,53 @@ export default function OnboardingScreen() {
   };
 
   const steps = [
-    // Step 0 — Travel Pace
+    // Step 0 — Hometown
+    <View key="hometown" style={{ flex: 1, justifyContent: "center", paddingVertical: 40 }}>
+      <Text
+        style={{
+          fontFamily: "Georgia",
+          fontWeight: "700",
+          fontSize: 28,
+          color: INK_DARK,
+          textAlign: "center",
+          marginBottom: 8,
+          letterSpacing: -0.5,
+        }}
+      >
+        Where are you based?
+      </Text>
+      <Text
+        style={{
+          fontSize: 14,
+          color: INK_LIGHT,
+          textAlign: "center",
+          marginBottom: 48,
+          letterSpacing: 0.5,
+        }}
+      >
+        Your home city helps us plan better trips
+      </Text>
+      <TextInput
+        value={hometown}
+        onChangeText={setHometown}
+        placeholder="e.g. Pittsburgh, PA"
+        placeholderTextColor="rgba(13, 43, 69, 0.35)"
+        autoFocus
+        style={{
+          fontSize: 18,
+          fontFamily: "Georgia",
+          color: INK_DARK,
+          textAlign: "center",
+          paddingVertical: 16,
+          paddingHorizontal: 24,
+          borderBottomWidth: 2,
+          borderBottomColor: hometown.trim() ? BLUE_ACCENT : "rgba(13, 43, 69, 0.2)",
+          marginHorizontal: 32,
+        }}
+      />
+    </View>,
+
+    // Step 1 — Travel Pace
     <View key="pace" style={{ flex: 1, justifyContent: "center", paddingVertical: 40 }}>
       <Text
         style={{

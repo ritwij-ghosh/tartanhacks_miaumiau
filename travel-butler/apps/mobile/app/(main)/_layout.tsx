@@ -34,11 +34,12 @@ function TabIcon({
         <Text style={{ fontSize: 20, marginBottom: 2 }}>{icon}</Text>
       )}
       <Text
+        numberOfLines={1}
         style={{
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: focused ? "600" : "400",
           color: focused ? BLUE_ACCENT : MUTED_BLUE,
-          letterSpacing: 0.3,
+          letterSpacing: 0.2,
         }}
       >
         {label}
