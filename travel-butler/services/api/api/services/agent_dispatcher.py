@@ -22,11 +22,11 @@ from api.services.tool_router import call_tool
 logger = logging.getLogger("travel_butler.agent_dispatcher")
 
 
-async def dispatch_step(step: ItineraryStep) -> ItineraryStep:
+async def dispatch_step(step: ItineraryStep, user_id: str) -> ItineraryStep:
     """Execute a single itinerary step by calling the appropriate MCP tool.
 
     1. Determines the right agent and tool
-    2. Builds the payload
+    2. Builds the payload (includes user_id for OAuth-dependent tools like gcal)
     3. Calls the MCP tool
     4. Updates the step with results
 
@@ -48,6 +48,7 @@ async def dispatch_step(step: ItineraryStep) -> ItineraryStep:
     try:
         # Pick the right tool and build payload based on step type
         tool_name, payload = _build_tool_call(step)
+        payload["user_id"] = user_id  # needed by gcal (and future OAuth tools)
         start = time.time()
         result = await call_tool(tool_name, payload)
         latency_ms = int((time.time() - start) * 1000)
@@ -68,7 +69,9 @@ async def dispatch_step(step: ItineraryStep) -> ItineraryStep:
     return step
 
 
-async def dispatch_all_steps(steps: list[ItineraryStep]) -> list[ItineraryStep]:
+async def dispatch_all_steps(
+    steps: list[ItineraryStep], user_id: str,
+) -> list[ItineraryStep]:
     """Execute all itinerary steps sequentially.
 
     Sequential because some steps may depend on results of earlier ones
@@ -79,7 +82,7 @@ async def dispatch_all_steps(steps: list[ItineraryStep]) -> list[ItineraryStep]:
         if step.status in (StepStatus.BOOKED, StepStatus.SKIPPED):
             results.append(step)
             continue
-        updated = await dispatch_step(step)
+        updated = await dispatch_step(step, user_id)
         results.append(updated)
     return results
 
@@ -94,7 +97,7 @@ def _build_tool_call(step: ItineraryStep) -> tuple[str, dict[str, Any]]:
     if step.action_payload:
         # Determine the search tool for this step type
         tool_name = _get_search_tool(step.type)
-        return tool_name, step.action_payload
+        return tool_name, {**step.action_payload}
 
     # Otherwise, build payload from step fields
     match step.type:

@@ -43,7 +43,10 @@ class Settings(BaseSettings):
     api_base_url: str = "http://localhost:8000"
     log_level: str = "DEBUG"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    # Gemini
+    gemini_api_key: str = ""
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     def validate_dev(self) -> None:
         """Warn about placeholder values in dev so nothing silently breaks."""

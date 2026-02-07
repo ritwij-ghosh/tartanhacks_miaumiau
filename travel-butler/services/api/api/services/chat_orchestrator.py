@@ -411,8 +411,8 @@ class ChatOrchestrator:
                 f"Destination: {latest.destination}\n"
                 f"Dates: {latest.start_date} to {latest.end_date}\n"
                 f"Steps: {json.dumps(steps_json, indent=2)}\n"
-                f"Use itinerary.update_step, itinerary.add_step, or itinerary.remove_step to modify it. "
-                f"Use itinerary.execute when the user approves."
+                f"Use itinerary_update_step, itinerary_add_step, or itinerary_remove_step to modify it. "
+                f"Use itinerary_execute when the user approves."
             )
         except Exception:
             return None
@@ -443,7 +443,11 @@ class ChatOrchestrator:
 # ── System Prompt ─────────────────────────────────────────────────────
 
 def _build_system_prompt() -> str:
-    return """You are Winston, a personal travel concierge. Introduce yourself briefly on first message.
+    from datetime import date
+    today = date.today().isoformat()
+    return f"""You are Winston, a personal travel concierge. Introduce yourself briefly on first message.
+
+TODAY'S DATE: {today}. When the user mentions dates without a year (e.g. "March 15" or "next Friday"), infer the correct year based on today's date. Always use the nearest future date.
 
 RULES:
 1. Be concise. Short sentences. Courteous. Ask 1–2 questions at a time, only what's essential (destination, dates, departure city). Infer everything else.
@@ -683,7 +687,10 @@ def _underscore_to_dot(name: str) -> str:
 
 
 def _hash_payload(payload: dict[str, Any]) -> str:
-    payload_str = json.dumps(payload, sort_keys=True)
+    try:
+        payload_str = json.dumps(payload, sort_keys=True, default=str)
+    except Exception:
+        payload_str = str(payload)
     return hashlib.sha256(payload_str.encode()).hexdigest()[:16]
 
 

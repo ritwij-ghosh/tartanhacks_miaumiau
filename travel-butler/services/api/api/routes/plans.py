@@ -13,6 +13,7 @@ from api.services.itinerary_manager import (
     get_user_itineraries,
     update_itinerary_step,
     execute_itinerary,
+    delete_itinerary,
 )
 
 router = APIRouter()
@@ -75,3 +76,17 @@ async def execute(itinerary_id: str, request: Request):
         itinerary=result,
         message=f"Itinerary executed — {len(result.steps)} steps processed",
     )
+
+
+@router.delete("/{itinerary_id}")
+async def delete(itinerary_id: str, request: Request):
+    """Delete an itinerary and all its steps."""
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    deleted = await delete_itinerary(user_id, itinerary_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Itinerary not found")
+
+    return {"deleted": True, "itinerary_id": itinerary_id}

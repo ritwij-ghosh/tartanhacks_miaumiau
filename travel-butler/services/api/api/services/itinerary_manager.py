@@ -24,6 +24,7 @@ from api.schemas.itinerary import (
     STEP_TYPE_TO_AGENT,
 )
 from api.services.agent_dispatcher import dispatch_all_steps
+from api.services.export_calendar import export_itinerary_to_gcal
 
 logger = logging.getLogger("travel_butler.itinerary_manager")
 
@@ -277,6 +278,38 @@ async def remove_step_from_itinerary(
     return await get_itinerary(user_id, itinerary_id)
 
 
+# ── Delete ────────────────────────────────────────────────────────────
+
+async def delete_itinerary(user_id: str, itinerary_id: str) -> bool:
+    """Delete an itinerary and all its steps.
+
+    Returns True if the itinerary was found and deleted, False otherwise.
+    """
+    sb = get_supabase()
+
+    # Verify the itinerary belongs to this user
+    plan_result = (
+        sb.table("plans")
+        .select("id, status")
+        .eq("id", itinerary_id)
+        .eq("user_id", user_id)
+        .maybe_single()
+        .execute()
+    )
+    if not plan_result.data:
+        return False
+
+    # Delete steps first (child rows), then the plan
+    try:
+        sb.table("plan_steps").delete().eq("plan_id", itinerary_id).execute()
+        sb.table("plans").delete().eq("id", itinerary_id).eq("user_id", user_id).execute()
+        logger.info("Deleted itinerary '%s' for user %s", itinerary_id, user_id)
+        return True
+    except Exception as e:
+        logger.error("Failed to delete itinerary '%s': %s", itinerary_id, e)
+        raise
+
+
 # ── Execute ───────────────────────────────────────────────────────────
 
 async def execute_itinerary(user_id: str, itinerary_id: str) -> Itinerary | None:
@@ -293,9 +326,9 @@ async def execute_itinerary(user_id: str, itinerary_id: str) -> Itinerary | None
     sb.table("plans").update({"status": "executing"}).eq("id", itinerary_id).execute()
     itinerary.status = ItineraryStatus.EXECUTING
 
-    # Dispatch all pending steps to agents
+    # Dispatch all pending steps to agents (user_id needed for OAuth-dependent tools)
     logger.info("Executing itinerary '%s' — %d steps", itinerary.title, len(itinerary.steps))
-    updated_steps = await dispatch_all_steps(itinerary.steps)
+    updated_steps = await dispatch_all_steps(itinerary.steps, user_id)
 
     # Persist step results back to DB
     for step in updated_steps:
@@ -314,6 +347,17 @@ async def execute_itinerary(user_id: str, itinerary_id: str) -> Itinerary | None
     if all_resolved:
         sb.table("plans").update({"status": "completed"}).eq("id", itinerary_id).execute()
         itinerary.status = ItineraryStatus.COMPLETED
+
+    # ── Export all steps to Google Calendar ───────────────────────────
+    # This creates a calendar event for every step (flights, meals, etc.)
+    # so the user's full trip is visible in their Google Calendar.
+    # Runs regardless of individual step success — even failed bookings
+    # get a placeholder event so the user remembers to handle them.
+    try:
+        gcal_result = await export_itinerary_to_gcal(user_id, itinerary)
+        logger.info("Calendar export: %s", gcal_result)
+    except Exception as exc:
+        logger.warning("Calendar export failed (non-blocking): %s", exc)
 
     return itinerary
 

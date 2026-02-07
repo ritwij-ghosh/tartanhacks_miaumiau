@@ -2,16 +2,21 @@
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
 # Setup paths and env
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Also add project root so mcp_servers package is importable
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 from api.services.gemini_service import create_gemini_service, Message
 from api.services.chat_orchestrator import _build_system_prompt, _get_all_tools
+from api.services.agent_dispatcher import dispatch_all_steps
+from api.services.export_calendar import export_itinerary_to_gcal
 from api.schemas.itinerary import (
     Itinerary, ItineraryStep, StepType, Location,
     STEP_TYPE_TO_AGENT, AGENT_TOOLS,
@@ -112,24 +117,65 @@ def display_itinerary(it: Itinerary):
     print(f"{'─' * 50}\n")
 
 
-def display_dispatch(it: Itinerary):
-    """Print agent dispatch for every step."""
-    print(f"\n{G}{B}✅ CONFIRMED{X}\n")
+async def real_dispatch(it: Itinerary, user_id: str):
+    """Actually dispatch agents via MCP tools and export to Google Calendar."""
+    print(f"\n{G}{B}✅ CONFIRMED — dispatching agents…{X}\n")
+
+    # 1. Call real MCP tools for every step
+    updated_steps = await dispatch_all_steps(it.steps, user_id)
+    it.steps = updated_steps
+
     for s in it.steps:
+        status_icon = {
+            "found": "✅", "booked": "✅", "searching": "⏳",
+            "skipped": "⏭️", "failed": "❌",
+        }.get(s.status.value, "•")
         tools = AGENT_TOOLS.get(s.agent, [])
         tools_str = f" → {', '.join(tools)}" if tools else ""
-        print(f"{G}  {s.agent} engaged for {s.title}{tools_str}{X}")
-    print(f"\n{B}── Itinerary locked. {len(it.steps)} agents dispatched. ──{X}\n")
+        result_info = ""
+        if s.result:
+            if "error" in s.result:
+                result_info = f" ({R}{s.result['error']}{X})"
+            elif "data" in s.result:
+                result_info = f" {DIM}(ok){X}"
+        print(f"  {status_icon} {s.agent} engaged for {B}{s.title}{X}{tools_str}{result_info}")
 
-    # Print raw JSON
-    print(f"{DIM}Raw itinerary JSON:{X}")
+    print(f"\n{B}── {len(it.steps)} agents dispatched. ──{X}\n")
+
+    # 2. Export all steps to Google Calendar
+    print(f"{Y}Exporting to Google Calendar…{X}")
+    try:
+        gcal_result = await export_itinerary_to_gcal(user_id, it)
+        created = gcal_result.get("created", 0)
+        failed = gcal_result.get("failed", 0)
+        error = gcal_result.get("error")
+        if error:
+            print(f"  {R}⚠ Calendar export skipped: {error}{X}")
+        elif failed:
+            print(f"  {Y}📅 {created} events created, {failed} failed{X}")
+        else:
+            print(f"  {G}📅 {created} events added to Google Calendar{X}")
+    except Exception as exc:
+        print(f"  {R}⚠ Calendar export error: {exc}{X}")
+
+    # 3. Print raw JSON
+    print(f"\n{DIM}Raw itinerary JSON:{X}")
     print(f"{DIM}{json.dumps(it.model_dump(), indent=2, default=str)}{X}\n")
 
 
 # ── Main loop ──
 
 async def main():
-    print("\n🧳 Travel Butler CLI")
+    # Resolve user_id for agent dispatch (needed for OAuth-dependent tools like GCal)
+    user_id = os.environ.get("CLI_USER_ID", "")
+    if not user_id:
+        user_id = input("Enter your Supabase user_id (from auth.users): ").strip()
+    if not user_id:
+        print(f"{R}No user_id provided. Agents requiring OAuth (e.g. GCal) will fail.{X}")
+        user_id = "cli-anonymous"
+
+    mcp_mode = os.environ.get("MCP_MODE", "mock")
+    print(f"\n🧳 Travel Butler CLI  {DIM}(MCP_MODE={mcp_mode}, user={user_id[:12]}…){X}")
     print("=" * 50)
     print("Type your message and press Enter.")
     print("Type 'quit' or 'exit' to stop.")
@@ -193,7 +239,7 @@ async def main():
 
                     elif name == "itinerary_execute":
                         if current_itinerary:
-                            display_dispatch(current_itinerary)
+                            await real_dispatch(current_itinerary, user_id)
                         else:
                             print(f"{R}No itinerary to execute.{X}\n")
                         break  # end conversation

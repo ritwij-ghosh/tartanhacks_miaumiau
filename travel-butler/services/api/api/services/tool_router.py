@@ -1,4 +1,10 @@
-"""Tool router — dispatches tool calls to local MCP servers (dev) or Dedalus (prod)."""
+"""Tool router — dispatches tool calls to local MCP servers (dev) or Dedalus (prod).
+
+Routing logic:
+  - MCP_MODE=mock  → always call local MCP stubs (no network)
+  - MCP_MODE=real + DEDALUS_URL set → forward to Dedalus gateway via HTTP
+  - MCP_MODE=real + no DEDALUS_URL  → call local MCP servers directly (real mode)
+"""
 
 from __future__ import annotations
 
@@ -45,10 +51,17 @@ async def call_tool(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
     trace = ToolTraceEvent(tool=tool_name, status=ToolStatus.PENDING, payload_hash=payload_hash)
 
     try:
-        if settings.mcp_mode == "mock" or settings.dedalus_url is None:
-            result = await _call_local(tool_name, payload)
-        else:
+        # Decide routing: Dedalus (HTTP) vs local (in-process)
+        use_dedalus = (
+            settings.mcp_mode != "mock"
+            and settings.dedalus_url is not None
+            and settings.dedalus_url != ""
+        )
+
+        if use_dedalus:
             result = await _call_dedalus(tool_name, payload)
+        else:
+            result = await _call_local(tool_name, payload)
 
         latency = (time.time() - start) * 1000
         trace.status = ToolStatus.OK
@@ -85,12 +98,27 @@ async def _call_local(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]
 
 
 async def _call_dedalus(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Forward tool call to hosted Dedalus MCP gateway."""
+    """Forward tool call to Dedalus MCP gateway via HTTP.
+
+    The Dedalus gateway returns { "tool": "...", "result": {...}, "latency_ms": ... }.
+    We unwrap and return just the inner result.
+    """
+    logger.debug("Routing %s through Dedalus at %s", tool_name, settings.dedalus_url)
+
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if settings.dedalus_api_key:
+        headers["Authorization"] = f"Bearer {settings.dedalus_api_key}"
+
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             f"{settings.dedalus_url}/tools/{tool_name}",
             json=payload,
-            headers={"Authorization": f"Bearer {settings.dedalus_api_key}"},
+            headers=headers,
         )
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+
+    # Dedalus wraps result — unwrap if present
+    if "result" in data:
+        return data["result"]
+    return data

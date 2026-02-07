@@ -1,13 +1,14 @@
 """Google OAuth2 flows.
 
-Two separate OAuth flows:
-1. SIGN-IN: Handled client-side via expo-auth-session → Supabase signInWithIdToken.
-   No backend involvement needed for sign-in.
+Primary flow (preferred):
+  During Google sign-in, Supabase returns provider_token & provider_refresh_token
+  in the redirect URL.  The mobile app captures these and POSTs them to
+  POST /oauth/google/store-tokens so the backend can use them for GCal.
 
-2. CALENDAR CONNECTION: After a user is logged in, they can connect their Google
-   Calendar. This flow goes through the backend to securely store refresh tokens.
-   - GET  /oauth/google/start    → returns consent URL with calendar scopes
-   - GET  /oauth/google/callback → exchanges code for tokens, stores in DB
+Fallback flow (manual connection):
+  If the sign-in tokens are missing or expired, the user can re-connect via:
+  - GET  /oauth/google/start    → returns consent URL with calendar scopes
+  - GET  /oauth/google/callback → exchanges code for tokens, stores in DB
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
 from api.config import settings
 from api.db.supabase import get_supabase
@@ -32,6 +34,49 @@ CALENDAR_SCOPES = "https://www.googleapis.com/auth/calendar.events"
 # Google OAuth endpoints
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+
+
+# ── Store tokens from sign-in flow ────────────────────────────────────
+
+
+class StoreTokensRequest(BaseModel):
+    provider_token: str
+    provider_refresh_token: str | None = None
+
+
+@router.post("/google/store-tokens")
+async def store_google_tokens(body: StoreTokensRequest, request: Request):
+    """Store Google provider tokens obtained during sign-in.
+
+    The mobile app calls this right after Google sign-in to persist the
+    provider_token (Google access token) and provider_refresh_token
+    (Google refresh token) so the backend can use them for Calendar API calls.
+    """
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    sb = get_supabase()
+    try:
+        sb.table("user_oauth_tokens").upsert(
+            {
+                "user_id": user_id,
+                "provider": "google",
+                "access_token": body.provider_token,
+                "refresh_token": body.provider_refresh_token,
+                "scopes": "https://www.googleapis.com/auth/calendar",
+            },
+            on_conflict="user_id,provider",
+        ).execute()
+        logger.info("Stored Google provider tokens for user %s (from sign-in)", user_id)
+    except Exception as exc:
+        logger.error("Failed to store provider tokens: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to store tokens")
+
+    return {"stored": True}
+
+
+# ── Fallback: manual Calendar connection ──────────────────────────────
 
 
 @router.get("/google/start")
@@ -128,27 +173,59 @@ async def google_calendar_callback(code: str = "", state: str = "", error: str =
     return RedirectResponse(url="travelbutler://oauth/success")
 
 
+@router.get("/google/status")
+async def google_calendar_status(request: Request):
+    """Check whether the current user has connected Google Calendar.
+
+    Returns { connected: true/false }.
+    The mobile app can use this to show/hide the "Connect Calendar" button.
+    """
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    sb = get_supabase()
+    result = (
+        sb.table("user_oauth_tokens")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("provider", "google")
+        .execute()
+    )
+    connected = bool(result.data)
+    return {"connected": connected}
+
+
 async def get_google_access_token(user_id: str) -> str | None:
     """Helper: get a valid Google access token for a user.
 
     Refreshes the token if expired. Returns None if user hasn't connected Google.
     """
     sb = get_supabase()
-    result = (
-        sb.table("user_oauth_tokens")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("provider", "google")
-        .single()
-        .execute()
-    )
 
-    if not result.data:
+    # Use maybe_single() to avoid throwing when 0 rows returned.
+    # .single() raises an error if result set is empty; maybe_single()
+    # returns a result whose .data is None when no rows match.
+    try:
+        result = (
+            sb.table("user_oauth_tokens")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("provider", "google")
+            .maybe_single()
+            .execute()
+        )
+    except Exception as exc:
+        logger.warning("Failed to query OAuth tokens for user %s: %s", user_id, exc)
         return None
 
-    # TODO: Check expires_at and refresh if needed using refresh_token
-    refresh_token = result.data.get("refresh_token")
-    access_token = result.data.get("access_token")
+    row = result.data if result else None
+    if not row:
+        logger.info("No Google Calendar tokens found for user %s", user_id)
+        return None
+
+    refresh_token = row.get("refresh_token")
+    access_token = row.get("access_token")
 
     # For now, try the stored access token. If it fails, refresh it.
     if refresh_token:

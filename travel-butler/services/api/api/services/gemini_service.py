@@ -264,7 +264,8 @@ def create_gemini_service(
         Configured GeminiService instance
     """
     if api_key is None:
-        api_key = os.getenv("GEMINI_API_KEY")
+        from api.config import settings
+        api_key = settings.gemini_api_key or os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError(
                 "GEMINI_API_KEY not found in environment. "
