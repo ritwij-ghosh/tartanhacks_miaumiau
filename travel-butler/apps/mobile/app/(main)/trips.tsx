@@ -8,9 +8,11 @@ import {
   Platform,
   RefreshControl,
   Animated,
+  Alert,
 } from "react-native";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { api } from "@/lib/api";
 import { ItineraryCard, type ItineraryData, type ItineraryStepData } from "@/components/chat/ItineraryCard";
 
 const PARCHMENT = "#fdf5ec";
@@ -62,7 +64,19 @@ function formatDateRange(start: string, end: string): string {
   }
 }
 
-function TripCard({ trip, onPress }: { trip: TripSummary; onPress?: () => void }) {
+function TripCard({
+  trip,
+  onPress,
+  onDelete,
+  isDeleting,
+  isExpanded,
+}: {
+  trip: TripSummary;
+  onPress?: () => void;
+  onDelete?: () => void;
+  isDeleting?: boolean;
+  isExpanded?: boolean;
+}) {
   const statusConfig = STATUS_CONFIG[trip.status] || STATUS_CONFIG.draft;
 
   return (
@@ -73,9 +87,11 @@ function TripCard({ trip, onPress }: { trip: TripSummary; onPress?: () => void }
         backgroundColor: "#FFFFFF",
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: "rgba(17, 46, 147, 0.1)",
+        borderColor: isExpanded ? BLUE_ACCENT : "rgba(17, 46, 147, 0.1)",
         padding: 18,
-        marginBottom: 12,
+        marginBottom: isExpanded ? 0 : 12,
+        borderBottomLeftRadius: isExpanded ? 0 : 16,
+        borderBottomRightRadius: isExpanded ? 0 : 16,
         shadowColor: BLUE_ACCENT,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
@@ -125,24 +141,52 @@ function TripCard({ trip, onPress }: { trip: TripSummary; onPress?: () => void }
         {trip.title}
       </Text>
 
-      {/* Destination + dates */}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
-        {trip.destination ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-            <Text style={{ fontSize: 13, color: MUTED_BLUE }}>📍</Text>
-            <Text style={{ fontSize: 14, color: INK_LIGHT, fontWeight: "500" }}>
-              {trip.destination}
-            </Text>
-          </View>
-        ) : null}
-        {trip.start_date ? (
-          <>
-            <Text style={{ fontSize: 12, color: "rgba(107, 123, 158, 0.4)" }}>•</Text>
-            <Text style={{ fontSize: 13, color: MUTED_BLUE }}>
-              {formatDateRange(trip.start_date, trip.end_date)}
-            </Text>
-          </>
-        ) : null}
+      {/* Destination + dates + delete */}
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+          {trip.destination ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Text style={{ fontSize: 13, color: MUTED_BLUE }}>📍</Text>
+              <Text style={{ fontSize: 14, color: INK_LIGHT, fontWeight: "500" }}>
+                {trip.destination}
+              </Text>
+            </View>
+          ) : null}
+          {trip.start_date ? (
+            <>
+              <Text style={{ fontSize: 12, color: "rgba(107, 123, 158, 0.4)" }}>•</Text>
+              <Text style={{ fontSize: 13, color: MUTED_BLUE }}>
+                {formatDateRange(trip.start_date, trip.end_date)}
+              </Text>
+            </>
+          ) : null}
+        </View>
+
+        {/* Delete button */}
+        <TouchableOpacity
+          onPress={(e) => {
+            e.stopPropagation?.();
+            onDelete?.();
+          }}
+          activeOpacity={0.6}
+          disabled={isDeleting}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "rgba(220, 38, 38, 0.06)",
+            marginLeft: 8,
+          }}
+        >
+          {isDeleting ? (
+            <ActivityIndicator size="small" color="#dc2626" />
+          ) : (
+            <Text style={{ fontSize: 15 }}>🗑️</Text>
+          )}
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -283,6 +327,60 @@ export default function TripsScreen() {
     [expandedTrip, upcomingTrips, pastTrips]
   );
 
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const handleDelete = useCallback(
+    (trip: TripSummary) => {
+      const isDraft = trip.status === "draft";
+
+      const title = isDraft ? "Delete Draft?" : "Delete Trip?";
+      const message = isDraft
+        ? `Remove "${trip.title}" from your trips? This cannot be undone.`
+        : `"${trip.title}" is a scheduled trip. Bookings made through agents may not be fully refundable.\n\nAre you sure you want to delete this trip?`;
+      const buttons = isDraft
+        ? [
+            { text: "Cancel", style: "cancel" as const },
+            {
+              text: "Delete",
+              style: "destructive" as const,
+              onPress: () => performDelete(trip.id),
+            },
+          ]
+        : [
+            { text: "Cancel", style: "cancel" as const },
+            {
+              text: "Delete Anyway",
+              style: "destructive" as const,
+              onPress: () => performDelete(trip.id),
+            },
+          ];
+
+      Alert.alert(title, message, buttons);
+    },
+    []
+  );
+
+  const performDelete = useCallback(
+    async (tripId: string) => {
+      setDeleting(tripId);
+      try {
+        await api.delete(`/plans/${tripId}`);
+        // Remove from local state
+        setUpcomingTrips((prev) => prev.filter((t) => t.id !== tripId));
+        setPastTrips((prev) => prev.filter((t) => t.id !== tripId));
+        if (expandedTrip === tripId) {
+          setExpandedTrip(null);
+          setExpandedItinerary(null);
+        }
+      } catch (err: any) {
+        Alert.alert("Error", err.message || "Failed to delete trip");
+      } finally {
+        setDeleting(null);
+      }
+    },
+    [expandedTrip]
+  );
+
   const trips = activeTab === "upcoming" ? upcomingTrips : pastTrips;
 
   return (
@@ -417,30 +515,48 @@ export default function TripsScreen() {
             </Text>
           </View>
         ) : (
-          trips.map((trip) => (
-            <View key={trip.id}>
-              <TripCard trip={trip} onPress={() => handleTripPress(trip.id)} />
+          trips.map((trip) => {
+            const isExpanded = expandedTrip === trip.id;
+            return (
+              <View key={trip.id} style={{ marginBottom: 12 }}>
+                <TripCard
+                  trip={trip}
+                  onPress={() => handleTripPress(trip.id)}
+                  onDelete={() => handleDelete(trip)}
+                  isDeleting={deleting === trip.id}
+                  isExpanded={isExpanded}
+                />
 
-              {/* Expanded itinerary details */}
-              {expandedTrip === trip.id && (
-                <View style={{ marginBottom: 12, marginTop: -4 }}>
-                  {loadingDetails ? (
-                    <View style={{ alignItems: "center", paddingVertical: 20 }}>
-                      <ActivityIndicator size="small" color={BLUE_ACCENT} />
-                    </View>
-                  ) : expandedItinerary ? (
-                    <ItineraryCard itinerary={expandedItinerary} showActions={false} />
-                  ) : (
-                    <View style={{ alignItems: "center", paddingVertical: 16 }}>
-                      <Text style={{ fontSize: 13, color: MUTED_BLUE }}>
-                        No itinerary details available
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
-          ))
+                {/* Expanded itinerary details */}
+                {isExpanded && (
+                  <View
+                    style={{
+                      borderWidth: 1,
+                      borderTopWidth: 0,
+                      borderColor: BLUE_ACCENT,
+                      borderBottomLeftRadius: 16,
+                      borderBottomRightRadius: 16,
+                      overflow: "hidden",
+                    }}
+                  >
+                    {loadingDetails ? (
+                      <View style={{ alignItems: "center", paddingVertical: 20, backgroundColor: "#FFFFFF" }}>
+                        <ActivityIndicator size="small" color={BLUE_ACCENT} />
+                      </View>
+                    ) : expandedItinerary ? (
+                      <ItineraryCard itinerary={expandedItinerary} showActions={false} />
+                    ) : (
+                      <View style={{ alignItems: "center", paddingVertical: 16, backgroundColor: "#FFFFFF" }}>
+                        <Text style={{ fontSize: 13, color: MUTED_BLUE }}>
+                          No itinerary details available
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          })
         )}
       </ScrollView>
     </View>

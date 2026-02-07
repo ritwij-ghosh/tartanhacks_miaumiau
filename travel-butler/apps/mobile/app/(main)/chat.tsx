@@ -51,6 +51,7 @@ export default function ChatScreen() {
   const profileScale = useRef(new Animated.Value(1)).current;
   const [showProfile, setShowProfile] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [renderKey, setRenderKey] = useState(0);
 
   // Track keyboard
   useEffect(() => {
@@ -77,14 +78,22 @@ export default function ChatScreen() {
     };
   }, []);
 
-  // Scroll to bottom on mount
+  // Scroll to bottom whenever messages change
   useEffect(() => {
-    const t1 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
-    const t2 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
+    const t1 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 50);
+    const t2 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 150);
+    const t3 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 400);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
+      clearTimeout(t3);
     };
+  }, [messages.length, renderKey]);
+
+  // Helper: add a message and bump renderKey to force FlatList refresh
+  const addMessage = useCallback((msg: ChatMessage) => {
+    setMessages((prev) => [...prev, msg]);
+    setRenderKey((k) => k + 1);
   }, []);
 
   // ── Fetch latest itinerary from Supabase ──
@@ -162,12 +171,8 @@ export default function ChatScreen() {
       content: text,
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    addMessage(userMsg);
     setSending(true);
-
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
 
     try {
       // Call the real backend API
@@ -218,12 +223,8 @@ export default function ChatScreen() {
         assistantMsg.itinerary = currentItinerary;
       }
 
-      setMessages((prev) => [...prev, assistantMsg]);
+      addMessage(assistantMsg);
       setSending(false);
-
-    setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 200);
     } catch (err: any) {
       console.error("Chat API error:", err);
 
@@ -236,7 +237,7 @@ export default function ChatScreen() {
             ? "I couldn't verify your session. Please sign out and sign back in."
             : "I'm having trouble connecting to the server. Please make sure the backend is running and try again.",
       };
-      setMessages((prev) => [...prev, errorMsg]);
+      addMessage(errorMsg);
       setSending(false);
     }
   };
@@ -251,12 +252,8 @@ export default function ChatScreen() {
       role: "user",
       content: "Yes, proceed with this itinerary. Book everything.",
     };
-    setMessages((prev) => [...prev, confirmMsg]);
+    addMessage(confirmMsg);
     setSending(true);
-
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
 
     try {
       const res = await api.post("/chat/send", {
@@ -277,12 +274,8 @@ export default function ChatScreen() {
         itinerary: currentItinerary,
       };
 
-      setMessages((prev) => [...prev, executionMsg]);
+      addMessage(executionMsg);
       setSending(false);
-      
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 200);
     } catch {
       // Even if API fails, show the mock execution animation
       const executionMsg: ChatMessage = {
@@ -293,10 +286,10 @@ export default function ChatScreen() {
         itinerary: currentItinerary,
       };
 
-      setMessages((prev) => [...prev, executionMsg]);
+      addMessage(executionMsg);
       setSending(false);
     }
-  }, [currentItinerary, conversationId]);
+  }, [currentItinerary, conversationId, addMessage]);
 
   // ── Handle execution animation complete ──
   const handleExecutionComplete = useCallback(() => {
@@ -311,14 +304,10 @@ export default function ChatScreen() {
           `Your trip to ${currentItinerary.destination} has been booked! ` +
           `You can view it in the Trips tab. Need anything else?`,
       };
-      setMessages((prev) => [...prev, doneMsg]);
+      addMessage(doneMsg);
       setCurrentItinerary(null);
-
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 300);
     }
-  }, [currentItinerary, markItineraryCompleted]);
+  }, [currentItinerary, markItineraryCompleted, addMessage]);
 
   // ── Handle "Request Changes" ──
   const handleRequestChanges = useCallback(() => {
@@ -328,12 +317,8 @@ export default function ChatScreen() {
       role: "assistant",
       content: "Sure, what would you like to change? You can ask me to modify times, swap restaurants, add activities, or adjust anything else.",
     };
-    setMessages((prev) => [...prev, changeMsg]);
-
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 200);
-  }, []);
+    addMessage(changeMsg);
+  }, [addMessage]);
 
   // ── Render ──
   return (
@@ -432,7 +417,7 @@ export default function ChatScreen() {
         <FlatList
           ref={flatListRef}
           data={messages}
-          extraData={[messages.length, sending]}
+          extraData={renderKey}
           keyExtractor={(m) => m.id}
         style={{ flex: 1, paddingHorizontal: 16 }}
           contentContainerStyle={{ 

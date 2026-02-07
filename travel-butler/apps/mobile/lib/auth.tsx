@@ -49,12 +49,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", userId)
       .single();
-    if (data) setProfile(data as Profile);
+
+    if (data) {
+      setProfile(data as Profile);
+    } else if (error?.code === "PGRST116") {
+      // No profile row exists — create one so updates/upserts work later
+      const user = (await supabase.auth.getUser()).data.user;
+      const newProfile: Partial<Profile> = {
+        id: userId,
+        email: user?.email ?? null,
+        full_name: user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? null,
+        avatar_url: user?.user_metadata?.avatar_url ?? user?.user_metadata?.picture ?? null,
+        provider: user?.app_metadata?.provider ?? "email",
+        preferences: {},
+      };
+      const { data: created } = await supabase
+        .from("profiles")
+        .upsert(newProfile)
+        .select()
+        .single();
+      if (created) setProfile(created as Profile);
+    }
   }, []);
 
   useEffect(() => {
@@ -90,10 +110,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updatePreferences = async (prefs: Record<string, unknown>) => {
     if (!session?.user) return;
+    // Use upsert to guarantee the row exists — covers edge cases where
+    // the trigger didn't fire or the profile was deleted.
     const { data } = await supabase
       .from("profiles")
-      .update({ preferences: prefs })
-      .eq("id", session.user.id)
+      .upsert(
+        { id: session.user.id, preferences: prefs },
+        { onConflict: "id" }
+      )
       .select()
       .single();
     if (data) setProfile(data as Profile);
