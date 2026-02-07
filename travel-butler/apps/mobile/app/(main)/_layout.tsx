@@ -37,33 +37,36 @@ export default function MainLayout() {
         }}
       />
       <Tabs.Screen
-        name="itinerary"
+        name="dashboard"
         options={{
-          title: "Itinerary",
+          title: "Dashboard",
           tabBarIcon: ({ focused }) => (
-            <TabIcon label="🗓" focused={focused} />
+            <TabIcon label="🗺" focused={focused} />
           ),
         }}
+      />
+      <Tabs.Screen
+        name="history"
+        options={{
+          title: "History",
+          tabBarIcon: ({ focused }) => (
+            <TabIcon label="📋" focused={focused} />
+          ),
+        }}
+      />
+      {/* Hidden from tab bar but still navigable */}
+      <Tabs.Screen
+        name="itinerary"
+        options={{ href: null, title: "Itinerary" }}
       />
       <Tabs.Screen
         name="bookings"
-        options={{
-          title: "Bookings",
-          tabBarIcon: ({ focused }) => (
-            <TabIcon label="🎫" focused={focused} />
-          ),
-        }}
+        options={{ href: null, title: "Bookings" }}
       />
       <Tabs.Screen
         name="trip-pass"
-        options={{
-          title: "Trip Pass",
-          tabBarIcon: ({ focused }) => (
-            <TabIcon label="📲" focused={focused} />
-          ),
-        }}
+        options={{ href: null, title: "Trip Pass" }}
       />
-      {/* Hidden from tab bar but navigable */}
       <Tabs.Screen
         name="connect-google"
         options={{ href: null, title: "Connect Google" }}

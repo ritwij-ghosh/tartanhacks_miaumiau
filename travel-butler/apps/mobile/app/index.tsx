@@ -3,7 +3,7 @@ import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "@/lib/auth";
 
 export default function Index() {
-  const { session, loading } = useAuth();
+  const { session, loading, hasCompletedOnboarding } = useAuth();
 
   if (loading) {
     return (
@@ -13,6 +13,7 @@ export default function Index() {
     );
   }
 
-  if (session) return <Redirect href="/(main)/chat" />;
-  return <Redirect href="/(auth)/sign-in" />;
+  if (!session) return <Redirect href="/(auth)/sign-in" />;
+  if (!hasCompletedOnboarding) return <Redirect href="/(auth)/onboarding" />;
+  return <Redirect href="/(main)/chat" />;
 }
