@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.expo/
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Expo
+apps/mobile/ios/
+apps/mobile/android/
+
+# Python
+*.egg
+*.whl
+pip-log.txt
+
+# Secrets
+*.pem
+*.p12
+*.key
+*.cer
