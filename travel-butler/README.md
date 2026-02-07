@@ -33,7 +33,7 @@ cd apps/mobile
 npm install
 npx expo start
 ```
-
+ 
 ### 3. Backend API
 ```bash
 cd services/api
