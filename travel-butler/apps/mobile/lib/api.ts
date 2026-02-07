@@ -29,7 +29,10 @@ async function request<T = any>(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
+    const error = new Error(err.detail || `HTTP ${res.status}`);
+    (error as any).status = res.status;
+    (error as any).response = err;
+    throw error;
   }
 
   return res.json();

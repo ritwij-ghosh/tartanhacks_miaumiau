@@ -5,10 +5,18 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Platform,
+  Animated,
 } from "react-native";
 import { router } from "expo-router";
 import { CircleRating } from "@/components/ui/CircleRating";
 import { useAuth } from "@/lib/auth";
+
+const PARCHMENT = "#fdf5ec";
+const INK = "#202d8e";
+const INK_DARK = "#0D2B45";
+const INK_LIGHT = "#1A3D5C";
+const BLUE_ACCENT = "#112e93";
 
 const DIETARY_OPTIONS = ["None", "Vegetarian", "Vegan", "Halal", "Gluten-free"];
 const ACTIVITY_OPTIONS = ["Culture", "Outdoors", "Food", "Nightlife", "Shopping"];
@@ -48,11 +56,29 @@ export default function OnboardingScreen() {
 
   const steps = [
     // Step 0 — Travel Pace
-    <View key="pace" className="flex-1 justify-center">
-      <Text className="text-heading-lg text-white mb-2 text-center">
+    <View key="pace" style={{ flex: 1, justifyContent: "center", paddingVertical: 40 }}>
+      <Text
+        style={{
+          fontFamily: "Georgia",
+          fontWeight: "700",
+          fontSize: 28,
+          color: INK_DARK,
+          textAlign: "center",
+          marginBottom: 8,
+          letterSpacing: -0.5,
+        }}
+      >
         How do you like to travel?
       </Text>
-      <Text className="text-body-md text-brand-300 mb-8 text-center">
+      <Text
+        style={{
+          fontSize: 14,
+          color: INK_LIGHT,
+          textAlign: "center",
+          marginBottom: 48,
+          letterSpacing: 0.5,
+        }}
+      >
         Pick your pace
       </Text>
       <CircleRating
@@ -63,14 +89,39 @@ export default function OnboardingScreen() {
     </View>,
 
     // Step 1 — Dietary
-    <View key="diet" className="flex-1 justify-center">
-      <Text className="text-heading-lg text-white mb-2 text-center">
+    <View key="diet" style={{ flex: 1, justifyContent: "center", paddingVertical: 40 }}>
+      <Text
+        style={{
+          fontFamily: "Georgia",
+          fontWeight: "700",
+          fontSize: 28,
+          color: INK_DARK,
+          textAlign: "center",
+          marginBottom: 8,
+          letterSpacing: -0.5,
+        }}
+      >
         Any dietary preferences?
       </Text>
-      <Text className="text-body-md text-brand-300 mb-8 text-center">
+      <Text
+        style={{
+          fontSize: 14,
+          color: INK_LIGHT,
+          textAlign: "center",
+          marginBottom: 48,
+          letterSpacing: 0.5,
+        }}
+      >
         Select all that apply
       </Text>
-      <View className="flex-row flex-wrap justify-center gap-3">
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          gap: 12,
+        }}
+      >
         {DIETARY_OPTIONS.map((opt) => {
           const selected = dietary.includes(opt);
           return (
@@ -78,16 +129,30 @@ export default function OnboardingScreen() {
               key={opt}
               onPress={() => toggleChip(dietary, setDietary, opt)}
               activeOpacity={0.7}
-              className={`rounded-full px-5 py-2.5 border ${
-                selected
-                  ? "bg-brand-500 border-brand-500"
-                  : "bg-transparent border-white/30"
-              }`}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 20,
+                borderWidth: 1.5,
+                borderColor: selected
+                  ? INK_DARK
+                  : "rgba(13, 43, 69, 0.25)",
+                backgroundColor: selected
+                  ? "rgba(13, 43, 69, 0.1)"
+                  : "rgba(255, 255, 255, 0.6)",
+                shadowColor: INK_DARK,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: selected ? 0.15 : 0.05,
+                shadowRadius: 8,
+                elevation: selected ? 3 : 1,
+              }}
             >
               <Text
-                className={`text-body-md font-medium ${
-                  selected ? "text-white" : "text-white/60"
-                }`}
+                style={{
+                  fontSize: 14,
+                  fontWeight: selected ? "600" : "400",
+                  color: selected ? INK_DARK : INK_LIGHT,
+                  letterSpacing: 0.3,
+                }}
               >
                 {opt}
               </Text>
@@ -98,11 +163,29 @@ export default function OnboardingScreen() {
     </View>,
 
     // Step 2 — Budget
-    <View key="budget" className="flex-1 justify-center">
-      <Text className="text-heading-lg text-white mb-2 text-center">
+    <View key="budget" style={{ flex: 1, justifyContent: "center", paddingVertical: 40 }}>
+      <Text
+        style={{
+          fontFamily: "Georgia",
+          fontWeight: "700",
+          fontSize: 28,
+          color: INK_DARK,
+          textAlign: "center",
+          marginBottom: 8,
+          letterSpacing: -0.5,
+        }}
+      >
         What's your typical budget?
       </Text>
-      <Text className="text-body-md text-brand-300 mb-8 text-center">
+      <Text
+        style={{
+          fontSize: 14,
+          color: INK_LIGHT,
+          textAlign: "center",
+          marginBottom: 48,
+          letterSpacing: 0.5,
+        }}
+      >
         Per-trip spending range
       </Text>
       <CircleRating
@@ -113,14 +196,39 @@ export default function OnboardingScreen() {
     </View>,
 
     // Step 3 — Activities
-    <View key="activities" className="flex-1 justify-center">
-      <Text className="text-heading-lg text-white mb-2 text-center">
+    <View key="activities" style={{ flex: 1, justifyContent: "center", paddingVertical: 40 }}>
+      <Text
+        style={{
+          fontFamily: "Georgia",
+          fontWeight: "700",
+          fontSize: 28,
+          color: INK_DARK,
+          textAlign: "center",
+          marginBottom: 8,
+          letterSpacing: -0.5,
+        }}
+      >
         What do you enjoy most?
       </Text>
-      <Text className="text-body-md text-brand-300 mb-8 text-center">
+      <Text
+        style={{
+          fontSize: 14,
+          color: INK_LIGHT,
+          textAlign: "center",
+          marginBottom: 48,
+          letterSpacing: 0.5,
+        }}
+      >
         Select all that apply
       </Text>
-      <View className="flex-row flex-wrap justify-center gap-3">
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          gap: 12,
+        }}
+      >
         {ACTIVITY_OPTIONS.map((opt) => {
           const selected = activities.includes(opt);
           return (
@@ -128,16 +236,30 @@ export default function OnboardingScreen() {
               key={opt}
               onPress={() => toggleChip(activities, setActivities, opt)}
               activeOpacity={0.7}
-              className={`rounded-full px-5 py-2.5 border ${
-                selected
-                  ? "bg-brand-500 border-brand-500"
-                  : "bg-transparent border-white/30"
-              }`}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 20,
+                borderWidth: 1.5,
+                borderColor: selected
+                  ? INK_DARK
+                  : "rgba(13, 43, 69, 0.25)",
+                backgroundColor: selected
+                  ? "rgba(13, 43, 69, 0.1)"
+                  : "rgba(255, 255, 255, 0.6)",
+                shadowColor: INK_DARK,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: selected ? 0.15 : 0.05,
+                shadowRadius: 8,
+                elevation: selected ? 3 : 1,
+              }}
             >
               <Text
-                className={`text-body-md font-medium ${
-                  selected ? "text-white" : "text-white/60"
-                }`}
+                style={{
+                  fontSize: 14,
+                  fontWeight: selected ? "600" : "400",
+                  color: selected ? INK_DARK : INK_LIGHT,
+                  letterSpacing: 0.3,
+                }}
               >
                 {opt}
               </Text>
@@ -149,19 +271,120 @@ export default function OnboardingScreen() {
   ];
 
   const isLast = step === steps.length - 1;
+  const scaleAnim = useState(new Animated.Value(1))[0];
+  const dotScaleAnims = useState(
+    steps.map(() => new Animated.Value(1))
+  )[0];
+
+  const handleNext = () => {
+    if (isLast) {
+      handleFinish();
+    } else {
+      // Animate button press
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 0.95,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      setStep(step + 1);
+    }
+  };
+
+  const handleBack = () => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    setStep(step - 1);
+  };
 
   return (
-    <View className="flex-1 bg-surface-dark px-8">
-      {/* Progress dots */}
-      <View className="flex-row justify-center mt-16 mb-8 gap-2">
-        {steps.map((_, i) => (
-          <View
-            key={i}
-            className={`h-2 rounded-full ${
-              i === step ? "w-8 bg-brand-500" : "w-2 bg-white/20"
-            }`}
-          />
-        ))}
+    <View style={{ flex: 1, backgroundColor: PARCHMENT, paddingHorizontal: 32, position: "relative" }}>
+      {/* Decorative ink elements - subtle background accents */}
+      <View
+        style={{
+          position: "absolute",
+          top: Platform.OS === "ios" ? 100 : 80,
+          right: 20,
+          width: 2,
+          height: 60,
+          backgroundColor: "rgba(13, 43, 69, 0.08)",
+        }}
+      />
+
+      {/* Decorative ink line at top */}
+      <View
+        style={{
+          width: 60,
+          height: 1.5,
+          backgroundColor: "rgba(13, 43, 69, 0.2)",
+          alignSelf: "center",
+          marginTop: Platform.OS === "ios" ? 60 : 40,
+          marginBottom: 24,
+        }}
+      />
+
+      {/* Progress dots - hand-drawn style */}
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "center",
+          alignItems: "center",
+          marginBottom: 32,
+          gap: 8,
+        }}
+      >
+        {steps.map((_, i) => {
+          const isActive = i === step;
+          const isPast = i < step;
+          return (
+            <TouchableOpacity
+              key={i}
+              onPress={() => {
+                Animated.sequence([
+                  Animated.timing(dotScaleAnims[i], {
+                    toValue: 0.85,
+                    duration: 100,
+                    useNativeDriver: true,
+                  }),
+                  Animated.timing(dotScaleAnims[i], {
+                    toValue: 1,
+                    duration: 100,
+                    useNativeDriver: true,
+                  }),
+                ]).start();
+                setStep(i);
+              }}
+              activeOpacity={0.7}
+            >
+              <Animated.View
+                style={{
+                  transform: [{ scale: dotScaleAnims[i] }],
+                  width: isActive || isPast ? 32 : 8,
+                  height: 8,
+                  backgroundColor: isActive || isPast ? BLUE_ACCENT : "rgba(17, 46, 147, 0.15)",
+                  borderWidth: isActive || isPast ? 1.5 : 1,
+                  borderColor: isActive || isPast ? BLUE_ACCENT : "rgba(17, 46, 147, 0.25)",
+                }}
+              />
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <ScrollView
@@ -171,31 +394,112 @@ export default function OnboardingScreen() {
         {steps[step]}
       </ScrollView>
 
+      {/* Light blue gradient at bottom - soft and seamless */}
+      <View
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 180,
+          pointerEvents: "none",
+          zIndex: 0,
+        }}
+      >
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 180,
+            backgroundColor: "rgba(173, 206, 230, 0.12)",
+            opacity: 0.6,
+          }}
+        />
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 120,
+            backgroundColor: "rgba(173, 206, 230, 0.08)",
+            opacity: 0.5,
+          }}
+        />
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 60,
+            backgroundColor: "rgba(173, 206, 230, 0.05)",
+            opacity: 0.4,
+          }}
+        />
+      </View>
+
       {/* Navigation */}
-      <View className="pb-12 pt-4">
-        <TouchableOpacity
-          onPress={isLast ? handleFinish : () => setStep(step + 1)}
-          disabled={saving}
-          activeOpacity={0.8}
-          className="bg-brand-500 rounded-2xl py-4 items-center justify-center"
-          style={{ opacity: saving ? 0.5 : 1 }}
-        >
-          {saving ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text className="text-body-md font-semibold text-white">
-              {isLast ? "Get Started" : "Next"}
-            </Text>
-          )}
-        </TouchableOpacity>
+      <View style={{ paddingBottom: Platform.OS === "ios" ? 32 : 24, paddingTop: 16, position: "relative", zIndex: 1 }}>
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          <TouchableOpacity
+            onPress={handleNext}
+            disabled={saving}
+            activeOpacity={0.7}
+            style={{
+              backgroundColor: INK_DARK,
+              borderWidth: 1.5,
+              borderColor: "rgba(13, 43, 69, 0.3)",
+              paddingVertical: 17,
+              alignItems: "center",
+              shadowColor: INK_DARK,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.18,
+              shadowRadius: 14,
+              elevation: 4,
+              opacity: saving ? 0.6 : 1,
+            }}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color={PARCHMENT} />
+            ) : (
+              <Text
+                style={{
+                  color: PARCHMENT,
+                  fontWeight: "600",
+                  fontSize: 15,
+                  letterSpacing: 1.5,
+                  textTransform: "uppercase",
+                }}
+              >
+                {isLast ? "Get Started" : "Next"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </Animated.View>
 
         {step > 0 && (
           <TouchableOpacity
-            onPress={() => setStep(step - 1)}
+            onPress={handleBack}
             activeOpacity={0.7}
-            className="mt-3 items-center"
+            style={{
+              marginTop: 12,
+              alignItems: "center",
+              paddingVertical: 8,
+            }}
           >
-            <Text className="text-body-md text-brand-300">Back</Text>
+            <Text
+              style={{
+                fontSize: 14,
+                color: INK_LIGHT,
+                fontWeight: "400",
+                letterSpacing: 0.5,
+              }}
+            >
+              Back
+            </Text>
           </TouchableOpacity>
         )}
       </View>
