@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.config import settings
 from api.middleware import RequestIdMiddleware, AuthMiddleware
-from api.routes import health, chat, plans, bookings, exports, oauth, wallet
+from api.routes import health, chat, plans, bookings, exports, oauth, wallet, profiles
 
 app = FastAPI(
     title="Travel Butler API",
@@ -41,6 +41,7 @@ app.include_router(bookings.router, prefix="/bookings", tags=["bookings"])
 app.include_router(exports.router, prefix="/exports", tags=["exports"])
 app.include_router(oauth.router, prefix="/oauth", tags=["oauth"])
 app.include_router(wallet.router, prefix="/wallet", tags=["wallet"])
+app.include_router(profiles.router, prefix="/profiles", tags=["profiles"])
 
 
 @app.on_event("startup")

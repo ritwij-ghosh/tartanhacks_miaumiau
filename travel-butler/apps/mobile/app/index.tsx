@@ -1,28 +1,18 @@
 import { Redirect } from "expo-router";
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-
-// Set to true during development to skip auth and go straight to Chat
-const DEV_SKIP_AUTH = __DEV__;
+import { ActivityIndicator, View } from "react-native";
+import { useAuth } from "@/lib/auth";
 
 export default function Index() {
-  const [checked, setChecked] = useState(false);
-  const [authed, setAuthed] = useState(false);
+  const { session, loading } = useAuth();
 
-  useEffect(() => {
-    if (DEV_SKIP_AUTH) {
-      setAuthed(true);
-      setChecked(true);
-      return;
-    }
-    supabase.auth.getSession().then(({ data }) => {
-      setAuthed(!!data.session);
-      setChecked(true);
-    });
-  }, []);
+  if (loading) {
+    return (
+      <View className="flex-1 bg-surface-dark items-center justify-center">
+        <ActivityIndicator size="large" color="#6366F1" />
+      </View>
+    );
+  }
 
-  if (!checked) return null;
-
-  if (authed) return <Redirect href="/(main)/chat" />;
+  if (session) return <Redirect href="/(main)/chat" />;
   return <Redirect href="/(auth)/sign-in" />;
 }
