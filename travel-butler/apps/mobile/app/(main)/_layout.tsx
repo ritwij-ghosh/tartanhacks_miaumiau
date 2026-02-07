@@ -19,9 +19,7 @@ export default function MainLayout() {
         headerTitleStyle: { fontWeight: "600", fontSize: 17 },
         headerShadowVisible: false,
         tabBarStyle: {
-          backgroundColor: "#FFFFFF",
-          borderTopWidth: 0.5,
-          borderTopColor: "#E2E8F0",
+          display: "none", // Hide tab bar
         },
         tabBarActiveTintColor: "#6366F1",
         tabBarInactiveTintColor: "#94A3B8",
@@ -30,7 +28,8 @@ export default function MainLayout() {
       <Tabs.Screen
         name="chat"
         options={{
-          title: "Chat",
+          title: "",
+          headerShown: false,
           tabBarIcon: ({ focused }) => (
             <TabIcon label="💬" focused={focused} />
           ),
