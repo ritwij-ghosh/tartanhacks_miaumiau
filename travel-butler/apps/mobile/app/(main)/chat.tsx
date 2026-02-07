@@ -6,6 +6,7 @@ import {
   Platform,
   TouchableOpacity,
   Text,
+  Image,
   Animated,
   Keyboard,
   Dimensions,
@@ -480,18 +481,15 @@ export default function ChatScreen() {
             gap: 8,
           }}
         >
-          <View
+          <Image
+            source={require("@/assets/winston_logo.png")}
             style={{
               width: 28,
               height: 28,
               borderRadius: 14,
-              backgroundColor: BLUE_ACCENT,
-              alignItems: "center",
-              justifyContent: "center",
             }}
-          >
-            <Text style={{ color: PARCHMENT, fontSize: 10, fontWeight: "700", fontFamily: "Georgia" }}>W</Text>
-          </View>
+            resizeMode="cover"
+          />
           <ActivityIndicator size="small" color={BLUE_ACCENT} />
           <Text style={{ fontSize: 13, color: MUTED_BLUE, fontStyle: "italic" }}>
             Winston is thinking...

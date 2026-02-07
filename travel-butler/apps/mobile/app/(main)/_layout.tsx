@@ -1,24 +1,48 @@
 import { Tabs } from "expo-router";
-import { View, Text, Platform } from "react-native";
+import { View, Text, Image, Platform, ImageSourcePropType } from "react-native";
 
 const PARCHMENT = "#fdf5ec";
 const BLUE_ACCENT = "#112e93";
 const MUTED_BLUE = "#6B7B9E";
 
-function TabIcon({ icon, label, focused }: { icon: string; label: string; focused: boolean }) {
+function TabIcon({
+  icon,
+  image,
+  label,
+  focused,
+}: {
+  icon?: string;
+  image?: ImageSourcePropType;
+  label: string;
+  focused: boolean;
+}) {
   return (
     <View style={{ alignItems: "center", justifyContent: "center", paddingTop: 4 }}>
-      <Text style={{ fontSize: 20, marginBottom: 2 }}>{icon}</Text>
-    <Text
+      {image ? (
+        <Image
+          source={image}
+          style={{
+            width: 24,
+            height: 24,
+            marginBottom: 2,
+            opacity: focused ? 1 : 0.5,
+            tintColor: focused ? BLUE_ACCENT : MUTED_BLUE,
+          }}
+          resizeMode="contain"
+        />
+      ) : (
+        <Text style={{ fontSize: 20, marginBottom: 2 }}>{icon}</Text>
+      )}
+      <Text
         style={{
           fontSize: 10,
           fontWeight: focused ? "600" : "400",
           color: focused ? BLUE_ACCENT : MUTED_BLUE,
           letterSpacing: 0.3,
         }}
-    >
-      {label}
-    </Text>
+      >
+        {label}
+      </Text>
     </View>
   );
 }
@@ -50,7 +74,7 @@ export default function MainLayout() {
         name="chat"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="💬" label="Chat" focused={focused} />
+            <TabIcon image={require("@/assets/winston_message.png")} label="Chat" focused={focused} />
           ),
         }}
       />
@@ -58,7 +82,7 @@ export default function MainLayout() {
         name="trips"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="🧳" label="Trips" focused={focused} />
+            <TabIcon image={require("@/assets/winston_trips.png")} label="Trips" focused={focused} />
           ),
         }}
       />

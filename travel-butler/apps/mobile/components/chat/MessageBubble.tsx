@@ -1,4 +1,4 @@
-import { View, Text } from "react-native";
+import { View, Text, Image } from "react-native";
 import { useEffect, useRef } from "react";
 import { Animated } from "react-native";
 
@@ -96,33 +96,25 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         transform: [{ translateX: slideAnim }],
       }}
     >
-      {/* Avatar with stamp aesthetic */}
+      {/* Winston avatar */}
       <Animated.View
         style={{
           width: 40,
           height: 40,
           borderRadius: 20,
-          backgroundColor: BLUE_ACCENT,
-          alignItems: "center",
-          justifyContent: "center",
+          overflow: "hidden",
           shadowColor: BLUE_ACCENT,
           shadowOffset: { width: 2, height: 2 },
           shadowOpacity: 0.2,
           shadowRadius: 0,
           elevation: 2,
-          transform: [{ rotate: "-1deg" }],
         }}
       >
-        <Text
-          style={{
-            color: PARCHMENT,
-            fontSize: 14,
-            fontFamily: "Georgia",
-            fontWeight: "700",
-          }}
-        >
-          W
-        </Text>
+        <Image
+          source={require("@/assets/winston_logo.png")}
+          style={{ width: 40, height: 40, borderRadius: 20 }}
+          resizeMode="cover"
+        />
       </Animated.View>
 
       {/* Message Bubble */}
