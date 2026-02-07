@@ -16,6 +16,20 @@ from api.schemas.models import (
     WalletRequest,
 )
 
+from api.schemas.itinerary import (
+    StepType,
+    StepStatus,
+    ItineraryStatus,
+    Location,
+    ItineraryStep,
+    Itinerary,
+    ItineraryUpdateRequest,
+    ItineraryExecuteRequest,
+    ItineraryResponse,
+    STEP_TYPE_TO_AGENT,
+    AGENT_TOOLS,
+)
+
 __all__ = [
     "IntentType",
     "BookingStatus",
@@ -32,4 +46,15 @@ __all__ = [
     "ToolTraceEvent",
     "ExportRequest",
     "WalletRequest",
+    "StepType",
+    "StepStatus",
+    "ItineraryStatus",
+    "Location",
+    "ItineraryStep",
+    "Itinerary",
+    "ItineraryUpdateRequest",
+    "ItineraryExecuteRequest",
+    "ItineraryResponse",
+    "STEP_TYPE_TO_AGENT",
+    "AGENT_TOOLS",
 ]
