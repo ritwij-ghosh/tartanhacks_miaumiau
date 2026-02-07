@@ -302,10 +302,17 @@ export default function TripsScreen() {
           date: s.date || trip.start_date || "",
           start_time: s.start_time,
           end_time: s.end_time,
-          location: typeof s.location === "object" && s.location ? s.location : undefined,
+          location:
+            typeof s.location === "object" && s.location
+              ? s.location
+              : typeof s.location === "string" && s.location
+              ? { name: s.location }
+              : undefined,
           agent: s.agent || "unknown_agent",
           estimated_price_usd: parseFloat(s.estimated_price_usd || "0"),
           notes: s.notes,
+          status: s.status,
+          result: s.result,
         }));
 
         setExpandedItinerary({

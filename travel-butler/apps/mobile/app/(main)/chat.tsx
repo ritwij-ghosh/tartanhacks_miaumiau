@@ -128,10 +128,17 @@ export default function ChatScreen() {
         date: s.date || plan.start_date || "",
         start_time: s.start_time,
         end_time: s.end_time,
-        location: typeof s.location === "object" && s.location ? s.location : undefined,
+        location:
+          typeof s.location === "object" && s.location
+            ? s.location
+            : typeof s.location === "string" && s.location
+            ? { name: s.location }
+            : undefined,
         agent: s.agent || "unknown_agent",
         estimated_price_usd: parseFloat(s.estimated_price_usd || "0"),
         notes: s.notes,
+        status: s.status,
+        result: s.result,
       }));
 
       const itinerary: ItineraryData = {
@@ -420,18 +427,19 @@ export default function ChatScreen() {
           data={messages}
           extraData={renderKey}
           keyExtractor={(m) => m.id}
-        style={{ flex: 1, paddingHorizontal: 16 }}
-          contentContainerStyle={{ 
-            paddingBottom: Platform.OS === "ios" ? Math.max(100, keyboardHeight + 20) : 100, 
-          paddingTop: 24,
-            flexGrow: 1,
+          style={{ flex: 1, paddingHorizontal: 16 }}
+          contentContainerStyle={{
+            paddingBottom: 16,
+            paddingTop: 24,
           }}
+          bounces={false}
+          overScrollMode="never"
           onContentSizeChange={() => {
             setTimeout(() => {
               flatListRef.current?.scrollToEnd({ animated: true });
             }, 50);
           }}
-        renderItem={({ item }) => (
+          renderItem={({ item }) => (
           <View style={{ marginBottom: 24, paddingHorizontal: 8 }}>
             {/* Show execution animation */}
             {item.showExecution && item.itinerary ? (

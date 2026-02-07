@@ -43,6 +43,8 @@ export interface ItineraryStepData {
   agent: string;
   estimated_price_usd: number;
   notes?: string;
+  status?: string;
+  result?: Record<string, unknown>;
 }
 
 export interface ItineraryData {
@@ -278,7 +280,7 @@ export function ItineraryCard({
                     )}
                   </View>
 
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3, flexWrap: "wrap" }}>
                     <View
                       style={{
                         backgroundColor: "rgba(17, 46, 147, 0.06)",
@@ -297,17 +299,63 @@ export function ItineraryCard({
                         {step.end_time ? ` — ${formatTime(step.end_time)}` : ""}
                       </Text>
                     )}
+                    {step.status && step.status !== "pending" && (
+                      <View
+                        style={{
+                          backgroundColor:
+                            step.status === "booked" || step.status === "found"
+                              ? "rgba(5, 150, 105, 0.08)"
+                              : step.status === "failed"
+                              ? "rgba(220, 38, 38, 0.08)"
+                              : "rgba(107, 123, 158, 0.08)",
+                          paddingHorizontal: 6,
+                          paddingVertical: 2,
+                          borderRadius: 4,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            fontWeight: "600",
+                            textTransform: "uppercase",
+                            color:
+                              step.status === "booked" || step.status === "found"
+                                ? "#059669"
+                                : step.status === "failed"
+                                ? "#dc2626"
+                                : MUTED_BLUE,
+                          }}
+                        >
+                          {step.status === "booked"
+                            ? "✓ Booked"
+                            : step.status === "found"
+                            ? "✓ Found"
+                            : step.status === "failed"
+                            ? "✗ Failed"
+                            : step.status === "skipped"
+                            ? "Skipped"
+                            : step.status}
+                        </Text>
+                      </View>
+                    )}
                   </View>
 
                   {step.location?.name && (
                     <Text style={{ fontSize: 12, color: MUTED_BLUE, marginTop: 2 }}>
                       📍 {step.location.name}
+                      {step.location.address ? ` · ${step.location.address}` : ""}
                     </Text>
                   )}
 
                   {step.description && (
-                    <Text style={{ fontSize: 12, color: "rgba(107, 123, 158, 0.8)", marginTop: 2 }} numberOfLines={2}>
+                    <Text style={{ fontSize: 12, color: "rgba(107, 123, 158, 0.8)", marginTop: 2 }}>
                       {step.description}
+                    </Text>
+                  )}
+
+                  {step.notes && (
+                    <Text style={{ fontSize: 11, color: "rgba(107, 123, 158, 0.6)", marginTop: 2, fontStyle: "italic" }}>
+                      {step.notes}
                     </Text>
                   )}
                 </View>
