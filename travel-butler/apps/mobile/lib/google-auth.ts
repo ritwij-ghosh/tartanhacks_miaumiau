@@ -33,4 +33,9 @@ export const GOOGLE_ANDROID_CLIENT_ID =
  * - email: user's verified email address
  * - profile: user's display name and profile picture
  */
-export const GOOGLE_OIDC_SCOPES = ["openid", "email", "profile"];
+export const GOOGLE_OIDC_SCOPES = [
+  "openid",
+  "email",
+  "profile",
+  "https://www.googleapis.com/auth/calendar",
+];
