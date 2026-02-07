@@ -1,11 +1,12 @@
-import { View, Text, TouchableOpacity, Image } from "react-native";
+import { View, Text, TouchableOpacity, Image, Alert, ActivityIndicator } from "react-native";
 import { router } from "expo-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
+import * as WebBrowser from "expo-web-browser";
+import { makeRedirectUri } from "expo-auth-session";
+import { supabase } from "@/lib/supabase";
 
-// TODO: Re-enable Google OAuth once client ID is configured
-// import * as Google from "expo-auth-session/providers/google";
-// import * as WebBrowser from "expo-web-browser";
-// import { supabase } from "@/lib/supabase";
+// Needed so the browser auth session can return to the app
+WebBrowser.maybeCompleteAuthSession();
 
 const INK = "#202d8e";
 const INK_DARK = "#0D2B45";
@@ -21,27 +22,117 @@ const images = [image1, image2, image3];
 
 export default function SignInScreen() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  // Google sign-in via Supabase OAuth (works in Expo Go)
+  const signInWithGoogle = async () => {
+    setLoading(true);
+    try {
+      // This is the URL Expo Go will listen on to receive the redirect
+      const redirectTo = makeRedirectUri();
+
+      // Ask Supabase to start the Google OAuth flow.
+      // Google will only see Supabase's callback URL as the redirect_uri,
+      // NOT the exp:// URL — so no 400 error.
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+          scopes: "openid email profile https://www.googleapis.com/auth/calendar",
+          queryParams: {
+            access_type: "offline",   // ensures Google returns a refresh_token
+            prompt: "consent",        // always show consent so we get a fresh refresh_token
+          },
+        },
+      });
+
+      if (error) throw error;
+      if (!data?.url) throw new Error("No OAuth URL returned");
+
+      // Open the Supabase auth URL in an in-app browser
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+
+      if (result.type === "success") {
+        // Supabase returns tokens in the URL hash fragment:
+        // #access_token=SUPABASE_JWT&refresh_token=SUPABASE_REFRESH
+        //  &provider_token=GOOGLE_ACCESS_TOKEN&provider_refresh_token=GOOGLE_REFRESH_TOKEN
+        const hashPart = result.url.split("#")[1];
+        if (hashPart) {
+          const params = new URLSearchParams(hashPart);
+          const access_token = params.get("access_token");
+          const refresh_token = params.get("refresh_token");
+
+          // Google's provider tokens (for Calendar API access)
+          const provider_token = params.get("provider_token");
+          const provider_refresh_token = params.get("provider_refresh_token");
+
+          console.log("[sign-in] Hash params:", Array.from(params.keys()).join(", "));
+          console.log("[sign-in] provider_token present:", !!provider_token);
+          console.log("[sign-in] provider_refresh_token present:", !!provider_refresh_token);
+
+          if (access_token && refresh_token) {
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            if (sessionError) throw sessionError;
+
+            // Store Google provider tokens on the backend so it can use the
+            // Calendar API on the user's behalf. Uses the just-received
+            // Supabase access_token directly (don't rely on getSession()
+            // which may not have propagated yet).
+            if (provider_token) {
+              const API_BASE =
+                process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+              try {
+                const storeResp = await fetch(
+                  `${API_BASE}/oauth/google/store-tokens`,
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${access_token}`,
+                    },
+                    body: JSON.stringify({
+                      provider_token,
+                      provider_refresh_token: provider_refresh_token || null,
+                    }),
+                  }
+                );
+                console.log("[sign-in] store-tokens response:", storeResp.status);
+              } catch (err) {
+                console.warn("[sign-in] Could not store Google Calendar tokens:", err);
+              }
+            } else {
+              console.warn("[sign-in] No provider_token in redirect — calendar won't be connected");
+            }
+
+            // Navigate to root — index.tsx will redirect to onboarding or chat
+            router.replace("/");
+            return;
+          }
+        }
+        // If we get here, something went wrong with token extraction
+        throw new Error("Could not extract session from redirect");
+      }
+      // User cancelled — do nothing
+    } catch (err: any) {
+      console.error("Google sign-in error:", err);
+      Alert.alert("Sign-in failed", err?.message ?? String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Cycle through images every 1 second
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/425a2758-9714-4451-a9eb-a0714dde9f20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sign-in.tsx:26',message:'Image cycling effect started',data:{initialIndex:0,interval:1000},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     const interval = setInterval(() => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/425a2758-9714-4451-a9eb-a0714dde9f20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sign-in.tsx:29',message:'Image index update triggered',data:{currentIndex:currentImageIndex},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-      setCurrentImageIndex((prev) => {
-        const next = (prev + 1) % images.length;
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/425a2758-9714-4451-a9eb-a0714dde9f20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sign-in.tsx:32',message:'Image index updated',data:{prev,next},timestamp:Date.now(),runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        return next;
-      });
+      setCurrentImageIndex((prev) => (prev + 1) % images.length);
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [currentImageIndex]);
+  }, []);
 
   return (
     <View
@@ -181,13 +272,10 @@ export default function SignInScreen() {
         Travel Butler
       </Text>
 
-      {/* New User — dark ink glassmorphic button */}
+      {/* Sign In with Google — dark ink button */}
       <TouchableOpacity
-        onPress={() => {
-          // TODO: Re-enable OAuth backend integration
-          // For now, just navigate to onboarding
-          router.replace("/(auth)/onboarding");
-        }}
+        onPress={signInWithGoogle}
+        disabled={loading}
         activeOpacity={0.7}
         style={{
           width: "100%",
@@ -203,8 +291,12 @@ export default function SignInScreen() {
           shadowRadius: 14,
           elevation: 4,
           overflow: "hidden",
+          opacity: loading ? 0.6 : 1,
         }}
       >
+        {loading ? (
+          <ActivityIndicator color={PARCHMENT} />
+        ) : (
         <Text
           style={{
             color: PARCHMENT,
@@ -214,44 +306,9 @@ export default function SignInScreen() {
             textTransform: "uppercase",
           }}
         >
-          New User
+            Continue with Google
         </Text>
-      </TouchableOpacity>
-
-      {/* Sign In — light glassmorphic button */}
-      <TouchableOpacity
-        onPress={() => {
-          // TODO: Re-enable OAuth backend integration
-          // For now, just navigate to chat
-          router.replace("/(main)/chat");
-        }}
-        activeOpacity={0.7}
-        style={{
-          width: "100%",
-          backgroundColor: "rgba(255, 255, 255, 0.6)",
-          borderWidth: 1.5,
-          borderColor: "rgba(13, 43, 69, 0.25)",
-          paddingVertical: 17,
-          alignItems: "center",
-          shadowColor: INK_DARK,
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
-          elevation: 3,
-          overflow: "hidden",
-        }}
-      >
-        <Text
-          style={{
-            color: INK_DARK,
-            fontWeight: "600",
-            fontSize: 15,
-            letterSpacing: 1.5,
-            textTransform: "uppercase",
-          }}
-        >
-          Sign In
-        </Text>
+        )}
       </TouchableOpacity>
 
       {/* Bottom decorative */}

@@ -18,7 +18,8 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 async function request<T = any>(
   method: string,
   path: string,
-  body?: unknown
+  body?: unknown,
+  retries = 2
 ): Promise<T> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}${path}`, {
@@ -26,6 +27,12 @@ async function request<T = any>(
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
+
+  // Retry on 503 (server reloading)
+  if (res.status === 503 && retries > 0) {
+    await new Promise((r) => setTimeout(r, 2000));
+    return request<T>(method, path, body, retries - 1);
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
