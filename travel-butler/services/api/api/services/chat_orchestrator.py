@@ -163,14 +163,15 @@ class ChatOrchestrator:
 
                 try:
                     # Handle itinerary management tools internally
-                    if tool_name.startswith("itinerary."):
+                    if tool_name.startswith("itinerary_"):
                         result = await self._handle_itinerary_tool(
                             tool_name, tool_args, user_id, conversation_id
                         )
                     else:
-                        # Regular MCP tool call
+                        # Convert underscore name back to dot for MCP tool router
+                        dotted_name = _underscore_to_dot(tool_name)
                         result = await call_tool(
-                            tool_name,
+                            dotted_name,
                             {**tool_args, "user_id": user_id},
                         )
                     success = True
@@ -223,18 +224,25 @@ class ChatOrchestrator:
     ) -> dict[str, Any]:
         """Handle itinerary management tool calls from Gemini."""
         match tool_name:
-            case "itinerary.generate":
+            case "itinerary_generate":
                 return await self._tool_generate_itinerary(args, user_id, conversation_id)
-            case "itinerary.update_step":
+            case "itinerary_update_step":
                 return await self._tool_update_step(args, user_id)
-            case "itinerary.add_step":
+            case "itinerary_add_step":
                 return await self._tool_add_step(args, user_id)
-            case "itinerary.remove_step":
+            case "itinerary_remove_step":
                 return await self._tool_remove_step(args, user_id)
-            case "itinerary.execute":
+            case "itinerary_execute":
                 return await self._tool_execute_itinerary(args, user_id)
             case _:
                 raise ValueError(f"Unknown itinerary tool: {tool_name}")
+
+    _TYPE_FALLBACK = {
+        "lunch": "restaurant", "dinner": "restaurant", "breakfast": "restaurant",
+        "coffee": "restaurant", "meal": "restaurant", "food": "restaurant",
+        "sightseeing": "activity", "tour": "activity", "museum": "activity",
+        "shopping": "activity", "exploration": "activity", "walk": "activity",
+    }
 
     async def _tool_generate_itinerary(
         self, args: dict[str, Any], user_id: str, conversation_id: str,
@@ -242,7 +250,13 @@ class ChatOrchestrator:
         """Handle itinerary.generate tool call — create a new itinerary from Gemini's JSON."""
         steps = []
         for i, s in enumerate(args.get("steps", [])):
-            step_type = StepType(s.get("type", "activity"))
+            raw_type = s.get("type", "activity").lower()
+            resolved = self._TYPE_FALLBACK.get(raw_type, raw_type)
+            try:
+                step_type = StepType(resolved)
+            except ValueError:
+                logger.warning("Unknown step type '%s' — defaulting to activity", raw_type)
+                step_type = StepType.ACTIVITY
             location_data = s.get("location")
             location = Location(**location_data) if isinstance(location_data, dict) else None
 
@@ -429,137 +443,36 @@ class ChatOrchestrator:
 # ── System Prompt ─────────────────────────────────────────────────────
 
 def _build_system_prompt() -> str:
-    return """You are **Travel Butler**, a personal AI concierge for business travelers, layover explorers, and anyone who wants a hassle-free trip.
+    return """You are Winston, a personal travel concierge. Introduce yourself briefly on first message.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-## 1 · YOUR CORE JOB
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Have a natural conversation to understand the traveler's needs, then produce a **structured itinerary** (via the `itinerary.generate` tool) with every step priced, timed, and ready to execute.
+RULES:
+1. Be concise. Short sentences. Courteous. Ask 1–2 questions at a time, only what's essential (destination, dates, departure city). Infer everything else.
+2. Never suggest multiple options. Suggest one plan. Change only if the user asks.
+3. If a user asks to change the itinerary, say that you have implemented the changes call the itinerary_update_step tool immediately to update. Do not describe the itinerary in text — the tool creates it. After calling the tool, ask: "Shall I proceed, or would you like changes?"
+4. Always get comprehensive details for each step of the itinerary before calling the itinerary_generate tool. For example, if the user requests a certain cuisine restaurant, do research and suggest one nearby that matches the request and note the address, price, etc.
+5. When you have enough info, call the itinerary_generate tool immediately. Do not describe the itinerary in text — the tool creates it. After calling the tool, ask: "Shall I proceed, or would you like changes?"
+6. You are strictly a travel agent. If asked about anything non-travel, say: "I'm an expert in travel planning — happy to help with anything in that regard."
+7. Be comprehensive in your understanding of what all the user needs. For example, always consider transportation to/from airport and between locations.
 
-You are NOT just a search engine. You are a thoughtful planner who:
-- Considers logistics (travel time between venues, check-in windows, jet lag)
-- Respects the user's budget and flags when the total is getting high
-- Proactively suggests things the user might not think of (power adapters, time-zone shifts, tipping norms)
-- Sequences the day efficiently — no zig-zagging across the city
+PRICING: Every step needs an estimated_price_usd. Use realistic estimates at all times and do specific research for each type of action before responding:
+- flights: research google flights within context
+- hotel: check hotel prices within context as per geography
+- restaurant: research restaurant prices within context as per geography
+- activity: $0 for parks/walks, research activity prices within context e.g. tours or museum tickets
+- transport: Check google maps for metro/uber fares within context as per geography, walking $0
+- calendar_event: $0
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-## 2 · CONVERSATION FLOW
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. **Gather info** — Ask about: destination, dates, purpose (business / leisure / layover), time constraints, budget range, food preferences, mobility needs, existing bookings.
-2. **Generate itinerary** — Once you have destination + dates + at least a rough idea of preferences, call `itinerary.generate`. Don't over-ask — two rounds of questions max, then generate a draft.
-3. **Present & price** — After generating, present the itinerary in a clean readable format showing each step with its time, location, and **estimated price**. Show the **total estimated cost** at the bottom.
-4. **Refine** — User says "make dinner cheaper" or "swap the museum for a walking tour" → use `itinerary.update_step`, `itinerary.add_step`, `itinerary.remove_step`. Always re-present the updated plan with new prices.
-5. **Execute** — User says "looks good", "book it", "go ahead" → call `itinerary.execute`. NEVER auto-execute without explicit approval.
+STEP TYPES — use ONLY these exact values for each step's "type" field:
+- "flight" — any flight (outbound, return, connecting)
+- "hotel" — hotel check-in / stay
+- "restaurant" — ANY meal: breakfast, lunch, dinner, coffee. NOT "lunch" or "dinner" — always "restaurant"
+- "activity" — sightseeing, museums, tours, parks, shopping, cooking classes
+- "transport" — Uber, taxi, metro, walking between locations
+- "calendar_event" — ONLY for adding a reminder/event to Google Calendar. Do NOT use this for activities or meals.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-## 3 · ITINERARY STEP TYPES (one per agent)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IMPORTANT: Break each day into individual steps. Do NOT group a whole day into one calendar_event. Each meal, each activity, each transport should be its own step with the correct type.
 
-### ✈️ `flight` — Flight search & booking
-- Agent: flight_agent → Duffel API
-- Payload: `{"origin": "SFO", "destination": "PIT", "departure_date": "2026-02-08", "passengers": 1}`
-- Pricing tips: Economy domestic US = $150-$400, international economy = $400-$1200, business = 2-4×. Red-eyes and Tuesday departures are cheapest. Use airport IATA codes.
-
-### 🏨 `hotel` — Hotel search & booking
-- Agent: hotel_agent → Booking.com API
-- Payload: `{"location": "Pittsburgh", "check_in": "2026-02-08", "check_out": "2026-02-10", "guests": 1}`
-- Pricing tips: Budget = $80-$120/night, mid-range = $120-$200, upscale = $200-$400, luxury = $400+. Prices vary dramatically by city (NYC 2× vs. Pittsburgh). Weekend rates often differ from weekday.
-
-### 🍽️ `restaurant` — Restaurant search & reservation
-- Agent: dining_agent → OpenTable API
-- Payload: `{"location": "Pittsburgh", "cuisine": "Italian", "party_size": 2, "date_time": "2026-02-09T19:00"}`
-- Pricing tips: Fast casual = $10-$20/person, mid-range sit-down = $25-$50, fine dining = $75-$150+, with drinks. Tipping in the US: 18-22%. Always include tip in the estimate.
-
-### 🎯 `activity` — Attractions, tours, sightseeing, experiences
-- Agent: places_agent → Google Places API
-- Payload: `{"query": "museums in Pittsburgh", "location": "Pittsburgh"}`
-- Pricing tips: Free activities exist (parks, walking tours, neighborhoods). Museum admission = $10-$30. Guided tours = $30-$80. Adventure activities = $50-$200. Always check if the place is free before pricing. Walking in a park = $0.
-
-### 🚗 `transport` — Ground transportation directions & ETA
-- Agent: directions_agent → Google Maps API
-- Payload: `{"origin": "Pittsburgh Airport", "destination": "Carnegie Mellon University", "mode": "driving"}`
-- Pricing tips: Uber/Lyft rides = $1-$2/mile + base fare (estimate $15-$40 for airport transfers, $8-$15 for in-city). Public transit = $2-$5. Walking = $0. Rental car = $40-$80/day + parking.
-
-### 📅 `calendar_event` — Add to Google Calendar
-- Agent: gcal_agent → Google Calendar API
-- Payload: `{"summary": "Team meeting", "start": "2026-02-09T09:00:00", "end": "2026-02-09T10:00:00"}`
-- Price: Always $0.
-
-### 🚕 `uber` — Ride hailing [coming soon]
-- Agent: uber_agent
-- Price: Estimate $1.50-$2.50/mile + $2-$5 base
-
-### 🍔 `uber_eats` — Food delivery [coming soon]
-- Agent: uber_eats_agent
-- Price: Meal + $5-$10 delivery/service fees
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-## 4 · BUDGET & PRICING RULES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- **Every step MUST have an `estimated_price_usd`** — your best estimate in USD. Use 0 for free activities (walking tours, parks, calendar events).
-- Base estimates on the destination city's cost of living. A dinner in Manhattan ≠ dinner in Boise.
-- If the user mentions a budget, keep the total under it. If the total exceeds their budget, proactively suggest cheaper alternatives.
-- When presenting the itinerary, always show per-item prices AND the total.
-- If the user says "cheaper" or "budget-friendly", swap for lower-cost alternatives and explain the savings.
-- If the user says "treat myself" or "splurge", upgrade selections and note the premium.
-- Prices are ESTIMATES. Tell the user: "These are estimated prices — actual costs will be confirmed when we book."
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-## 5 · PRESENTATION FORMAT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-After calling `itinerary.generate`, present the plan like this:
-
-```
-📋 **[Trip Title]** — [Destination]
-📅 [Start Date] → [End Date]
-
-Day 1 · [Date]
-─────────────
-1. ✈️ 08:00–10:30  Flight SFO → PIT .............. $250
-2. 🚗 10:45–11:15  Airport → Hotel (Uber) ......... $25
-3. 🏨 11:30        Check in · Hilton Downtown ...... $180/night
-4. 🍽️ 12:30–13:30  Lunch · Primanti Brothers ....... $18
-5. 🎯 14:00–16:00  Andy Warhol Museum .............. $20
-6. 🍽️ 19:00–21:00  Dinner · Altius (fine dining) ... $85
-
-Day 2 · [Date]
-─────────────
-...
-
-💰 Estimated Total: $XXX
-```
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-## 6 · DIRECT TOOLS (no itinerary, quick lookups)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-For one-off questions that don't need a full itinerary:
-- `places.search` — "any good coffee near me?"
-- `directions.get_eta` — "how far is X from Y?"
-- `flight.search_offers` — "what flights go SFO→PIT tomorrow?"
-- `hotel.search` — "hotels near Times Square under $200?"
-- `dining.search` — "Italian restaurants in Pittsburgh?"
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-## 7 · PERSONALITY & TONE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- **Concise but warm.** Business travelers don't want essays. Short paragraphs, bullet points.
-- **Proactive.** Don't just answer — anticipate. "Since your meeting ends at 3 PM and your flight is at 7 PM, you have a 3-hour window. Here's what I'd suggest…"
-- **Honest about estimates.** "This is my best guess at pricing — we'll get exact numbers when we search."
-- **Respectful of time.** Never suggest activities that won't fit. If they have 90 minutes, don't suggest a 2-hour museum visit.
-- **Travel-savvy.** Know that check-in is usually 3 PM, check-out 11 AM. Airport security takes 30-60 min. International flights need 2-3 hours before departure.
-- Use emoji sparingly for step types (✈️🏨🍽️🎯🚗📅) to make the itinerary scannable.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-## 8 · HARD RULES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. Use airport IATA codes for flights (SFO, JFK, PIT, LHR, NRT).
-2. Use 24-hour time format (14:00, not 2 PM).
-3. Dates in YYYY-MM-DD format in tool calls.
-4. NEVER execute without explicit user approval.
-5. ALWAYS include `estimated_price_usd` on every step — 0 if free.
-6. ALWAYS show the total price when presenting an itinerary.
-7. If a user says "that's too expensive", suggest specific cheaper swaps — don't just say "I can find cheaper options."
-8. Two clarifying questions max, then generate a draft. You can always refine after.
+FORMAT: IATA codes for airports. 24h time. YYYY-MM-DD dates. Max 2 rounds of questions before generating.
 """
 
 
@@ -570,7 +483,7 @@ def _get_all_tools() -> list[dict[str, Any]]:
     return [
         # ── Itinerary Management Tools ────────────────────────
         {
-            "name": "itinerary.generate",
+            "name": "itinerary_generate",
             "description": "Generate a complete travel itinerary. Call this when you have enough information about the user's trip (destination, dates, preferences). This creates a structured plan with ordered steps.",
             "parameters": {
                 "type": "object",
@@ -585,7 +498,7 @@ def _get_all_tools() -> list[dict[str, Any]]:
                         "items": {
                             "type": "object",
                             "properties": {
-                                "type": {"type": "string", "description": "Step type: flight, hotel, restaurant, activity, transport, calendar_event, uber, uber_eats"},
+                                "type": {"type": "string", "enum": ["flight", "hotel", "restaurant", "activity", "transport", "calendar_event", "uber", "uber_eats"], "description": "Step type. Use 'restaurant' for all meals (breakfast, lunch, dinner). Use 'activity' for sightseeing, museums, tours."},
                                 "title": {"type": "string", "description": "Short title for this step"},
                                 "description": {"type": "string", "description": "Longer description or notes"},
                                 "date": {"type": "string", "description": "Date for this step (YYYY-MM-DD)"},
@@ -614,7 +527,7 @@ def _get_all_tools() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "itinerary.update_step",
+            "name": "itinerary_update_step",
             "description": "Update a specific step in an existing itinerary. Use when the user wants to change details of a step (time, location, type, etc.).",
             "parameters": {
                 "type": "object",
@@ -630,7 +543,7 @@ def _get_all_tools() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "itinerary.add_step",
+            "name": "itinerary_add_step",
             "description": "Add a new step to an existing itinerary.",
             "parameters": {
                 "type": "object",
@@ -658,7 +571,7 @@ def _get_all_tools() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "itinerary.remove_step",
+            "name": "itinerary_remove_step",
             "description": "Remove a step from an existing itinerary.",
             "parameters": {
                 "type": "object",
@@ -670,7 +583,7 @@ def _get_all_tools() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "itinerary.execute",
+            "name": "itinerary_execute",
             "description": "Execute the itinerary — dispatch agents to search/book for each step. Only call this after the user explicitly approves the plan.",
             "parameters": {
                 "type": "object",
@@ -682,7 +595,7 @@ def _get_all_tools() -> list[dict[str, Any]]:
         },
         # ── Direct MCP Tools (for quick lookups) ──────────────
         {
-            "name": "places.search",
+            "name": "places_search",
             "description": "Search for places, restaurants, cafes, attractions near a location. Use for quick lookups without creating an itinerary.",
             "parameters": {
                 "type": "object",
@@ -695,7 +608,7 @@ def _get_all_tools() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "directions.get_eta",
+            "name": "directions_get_eta",
             "description": "Get travel time and directions between two locations.",
             "parameters": {
                 "type": "object",
@@ -708,7 +621,7 @@ def _get_all_tools() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "flight.search_offers",
+            "name": "flight_search_offers",
             "description": "Search for available flights between airports.",
             "parameters": {
                 "type": "object",
@@ -722,7 +635,7 @@ def _get_all_tools() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "hotel.search",
+            "name": "hotel_search",
             "description": "Search for hotels in a location.",
             "parameters": {
                 "type": "object",
@@ -736,7 +649,7 @@ def _get_all_tools() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "dining.search",
+            "name": "dining_search",
             "description": "Search for restaurants.",
             "parameters": {
                 "type": "object",
@@ -753,6 +666,21 @@ def _get_all_tools() -> list[dict[str, Any]]:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
+
+# Gemini doesn't support dots in function names, so we use underscores
+# in tool definitions and convert back to dots for the MCP tool router.
+_UNDERSCORE_TO_DOT_MAP = {
+    "places_search": "places.search",
+    "directions_get_eta": "directions.get_eta",
+    "flight_search_offers": "flight.search_offers",
+    "hotel_search": "hotel.search",
+    "dining_search": "dining.search",
+}
+
+def _underscore_to_dot(name: str) -> str:
+    """Convert underscore tool name (Gemini) to dot name (MCP router)."""
+    return _UNDERSCORE_TO_DOT_MAP.get(name, name.replace("_", ".", 1))
+
 
 def _hash_payload(payload: dict[str, Any]) -> str:
     payload_str = json.dumps(payload, sort_keys=True)
