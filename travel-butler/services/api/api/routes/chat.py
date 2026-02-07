@@ -1,12 +1,18 @@
-from fastapi import APIRouter, Request
+# In api/routes/chat.py
+from api.services.gemini_service import create_gemini_service
+from api.services.chat_orchestrator import ChatOrchestrator
 
-from api.schemas import ChatRequest, ChatResponse
-from api.services.chat_orchestrator import orchestrate_chat
+# Singleton
+_orchestrator: ChatOrchestrator | None = None
 
-router = APIRouter()
+def get_orchestrator() -> ChatOrchestrator:
+    global _orchestrator
+    if _orchestrator is None:
+        gemini = create_gemini_service()
+        _orchestrator = ChatOrchestrator(gemini)
+    return _orchestrator
 
-
-@router.post("/send", response_model=ChatResponse)
-async def chat_send(body: ChatRequest, request: Request):
-    user_id = getattr(request.state, "user_id", "anonymous")
-    return await orchestrate_chat(user_id, body)
+@router.post("/send")
+async def send_message(req: ChatRequest, user_id: str = Depends(get_user_id)):
+    orchestrator = get_orchestrator()
+    return await orchestrator.orchestrate_chat(user_id, req)
