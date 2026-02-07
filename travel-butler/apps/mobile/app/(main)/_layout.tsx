@@ -1,13 +1,25 @@
 import { Tabs } from "expo-router";
-import { Text } from "react-native";
+import { View, Text, Platform } from "react-native";
 
-function TabIcon({ label, focused }: { label: string; focused: boolean }) {
+const PARCHMENT = "#fdf5ec";
+const BLUE_ACCENT = "#112e93";
+const MUTED_BLUE = "#6B7B9E";
+
+function TabIcon({ icon, label, focused }: { icon: string; label: string; focused: boolean }) {
   return (
+    <View style={{ alignItems: "center", justifyContent: "center", paddingTop: 4 }}>
+      <Text style={{ fontSize: 20, marginBottom: 2 }}>{icon}</Text>
     <Text
-      className={`text-caption ${focused ? "text-brand-500" : "text-muted"}`}
+        style={{
+          fontSize: 10,
+          fontWeight: focused ? "600" : "400",
+          color: focused ? BLUE_ACCENT : MUTED_BLUE,
+          letterSpacing: 0.3,
+        }}
     >
       {label}
     </Text>
+    </View>
   );
 }
 
@@ -15,65 +27,57 @@ export default function MainLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerStyle: { backgroundColor: "#FFFFFF" },
-        headerTitleStyle: { fontWeight: "600", fontSize: 17 },
-        headerShadowVisible: false,
+        headerShown: false,
         tabBarStyle: {
-          display: "none", // Hide tab bar
+          backgroundColor: PARCHMENT,
+          borderTopWidth: 1,
+          borderTopColor: "rgba(17, 46, 147, 0.1)",
+          height: Platform.OS === "ios" ? 85 : 65,
+          paddingBottom: Platform.OS === "ios" ? 24 : 8,
+          paddingTop: 4,
+          elevation: 0,
+          shadowColor: BLUE_ACCENT,
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 8,
         },
-        tabBarActiveTintColor: "#6366F1",
-        tabBarInactiveTintColor: "#94A3B8",
+        tabBarShowLabel: false,
+        tabBarActiveTintColor: BLUE_ACCENT,
+        tabBarInactiveTintColor: MUTED_BLUE,
       }}
     >
       <Tabs.Screen
         name="chat"
         options={{
-          title: "",
-          headerShown: false,
           tabBarIcon: ({ focused }) => (
-            <TabIcon label="💬" focused={focused} />
+            <TabIcon icon="💬" label="Chat" focused={focused} />
           ),
         }}
       />
       <Tabs.Screen
-        name="dashboard"
+        name="trips"
         options={{
-          title: "Dashboard",
           tabBarIcon: ({ focused }) => (
-            <TabIcon label="🗺" focused={focused} />
+            <TabIcon icon="🧳" label="Trips" focused={focused} />
           ),
         }}
       />
       <Tabs.Screen
-        name="history"
+        name="profile"
         options={{
-          title: "History",
           tabBarIcon: ({ focused }) => (
-            <TabIcon label="📋" focused={focused} />
+            <TabIcon icon="👤" label="Profile" focused={focused} />
           ),
         }}
       />
-      {/* Hidden from tab bar but still navigable */}
-      <Tabs.Screen
-        name="itinerary"
-        options={{ href: null, title: "Itinerary" }}
-      />
-      <Tabs.Screen
-        name="bookings"
-        options={{ href: null, title: "Bookings" }}
-      />
-      <Tabs.Screen
-        name="trip-pass"
-        options={{ href: null, title: "Trip Pass" }}
-      />
-      <Tabs.Screen
-        name="connect-google"
-        options={{ href: null, title: "Connect Google" }}
-      />
-      <Tabs.Screen
-        name="export-notion"
-        options={{ href: null, title: "Export to Notion" }}
-      />
+      {/* Hidden screens — still navigable but not in tab bar */}
+      <Tabs.Screen name="dashboard" options={{ href: null }} />
+      <Tabs.Screen name="history" options={{ href: null }} />
+      <Tabs.Screen name="itinerary" options={{ href: null }} />
+      <Tabs.Screen name="bookings" options={{ href: null }} />
+      <Tabs.Screen name="trip-pass" options={{ href: null }} />
+      <Tabs.Screen name="connect-google" options={{ href: null }} />
+      <Tabs.Screen name="export-notion" options={{ href: null }} />
     </Tabs>
   );
 }
